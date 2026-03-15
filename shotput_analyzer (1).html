@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#111">
+<title>ShotPut Analyzer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Barlow+Condensed:wght@500;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #111;
+  --surface: #1a1a1a;
+  --surface2: #222;
+  --border: #333;
+  --text: #f0f0f0;
+  --text2: #999;
+  --text3: #555;
+  --accent: #e8ff47;
+  --red: #ff3b30;
+  --mono: 'DM Mono', monospace;
+  --display: 'Barlow Condensed', sans-serif;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); overflow: hidden; -webkit-tap-highlight-color: transparent; }
+
+#app { display: flex; flex-direction: column; height: 100dvh; }
+
+/* Header */
+#header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; height: 48px; flex-shrink: 0;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+#logo { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: 0.06em; color: var(--accent); }
+#logo sub { font-size: 11px; color: var(--text3); font-weight: 500; margin-left: 6px; vertical-align: middle; letter-spacing: 0.05em; font-family: var(--mono); }
+
+/* Mode tabs */
+#mode-tabs { display: flex; flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); }
+.mode-tab {
+  flex: 1; padding: 9px 0; text-align: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text3);
+  border: none; background: none; cursor: pointer;
+  border-bottom: 2px solid transparent; transition: all 0.15s;
+}
+.mode-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Video region */
+#video-region { flex: 1; display: flex; background: #000; overflow: hidden; position: relative; min-height: 0; }
+.video-slot { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; background: #000; overflow: hidden; }
+.video-slot + .video-slot { border-left: 1px solid var(--border); }
+.video-slot video { max-width: 100%; max-height: 100%; display: none; object-fit: contain; }
+.video-slot canvas { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); pointer-events: none; touch-action: none; }
+.video-slot canvas.draw-active { pointer-events: all; cursor: crosshair; }
+
+/* Upload screen */
+.upload-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 24px;
+  background: #000; z-index: 5;
+}
+.upload-overlay.hidden { display: none; }
+
+.upload-icon-wrap {
+  width: 72px; height: 72px; border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center; opacity: 0.35;
+}
+
+.upload-actions { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+
+.btn-gallery {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 32px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+  font-family: var(--mono); font-size: 13px; cursor: pointer;
+  border-radius: 12px; transition: all 0.15s; min-width: 210px; justify-content: center;
+}
+.btn-gallery:hover { border-color: var(--accent); color: var(--accent); }
+
+/* iPhone-style record button */
+.record-wrap { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.record-outer {
+  width: 70px; height: 70px; border-radius: 50%;
+  border: 4px solid rgba(255,255,255,0.85);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; background: none; padding: 0;
+  transition: transform 0.1s;
+}
+.record-outer:active { transform: scale(0.93); }
+.record-inner { width: 52px; height: 52px; border-radius: 50%; background: var(--red); }
+.record-label { font-size: 11px; color: var(--text3); letter-spacing: 0.07em; text-transform: uppercase; }
+
+.upload-hint { font-size: 11px; color: var(--text3); }
+
+/* Badges */
+#draw-badge {
+  position: absolute; top: 10px; left: 10px;
+  background: var(--accent); color: #000;
+  font-family: var(--mono); font-size: 10px; font-weight: 500;
+  padding: 3px 10px; border-radius: 4px; letter-spacing: 0.08em;
+  text-transform: uppercase; display: none; pointer-events: none; z-index: 10;
+}
+#angle-badge {
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(0,0,0,0.72); border: 1px solid var(--accent);
+  color: var(--accent); font-family: var(--display); font-size: 30px; font-weight: 700;
+  padding: 4px 14px; border-radius: 8px;
+  display: none; pointer-events: none; z-index: 10;
+}
+
+/* Bottom panel */
+#bottom { flex-shrink: 0; background: var(--surface); border-top: 1px solid var(--border); display: flex; flex-direction: column; }
+
+/* Scrubber */
+#scrub-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px 6px; }
+#scrub-bar {
+  -webkit-appearance: none; flex: 1; height: 4px;
+  background: var(--border); border-radius: 2px; cursor: pointer; outline: none;
+}
+#scrub-bar::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px;
+  background: var(--accent); border-radius: 50%; cursor: pointer;
+}
+#time-disp { font-size: 11px; color: var(--text2); min-width: 90px; text-align: right; }
+
+/* Play row */
+#play-row { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 14px 8px; }
+.pb-btn {
+  display: flex; align-items: center; justify-content: center;
+  padding: 8px 14px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text2);
+  font-family: var(--mono); font-size: 12px;
+  border-radius: 9px; cursor: pointer; transition: all 0.12s; white-space: nowrap;
+}
+.pb-btn:active { opacity: 0.75; }
+.pb-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+.pb-btn.wide { flex: 1; max-width: 120px; }
+#annotate-btn { color: var(--text2); }
+#annotate-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+/* Speed row */
+#speed-row { display: flex; align-items: center; gap: 6px; padding: 0 14px 10px; }
+#speed-row span { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 2px; }
+.spd-btn {
+  flex: 1; padding: 7px 0; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text2);
+  font-family: var(--mono); font-size: 11px;
+  border-radius: 7px; cursor: pointer; text-align: center; transition: all 0.12s;
+}
+.spd-btn.active { border-color: var(--accent); color: var(--accent); }
+
+/* Annotation toolbar */
+#draw-toolbar { display: none; flex-direction: column; border-top: 1px solid var(--border); }
+#draw-toolbar.open { display: flex; }
+#tool-row { display: flex; align-items: center; gap: 5px; padding: 8px 14px 6px; }
+.dtool-btn {
+  flex: 1; padding: 8px 0; text-align: center;
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text2);
+  font-family: var(--mono); font-size: 11px; border-radius: 8px; cursor: pointer; transition: all 0.12s;
+}
+.dtool-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+#draw-actions { display: flex; align-items: center; gap: 6px; padding: 0 14px 10px; }
+input[type="color"] { width: 42px; height: 38px; border: 1px solid var(--border); border-radius: 8px; background: none; cursor: pointer; padding: 3px; }
+.da-btn {
+  flex: 1; padding: 8px 0; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text2);
+  font-family: var(--mono); font-size: 11px; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.12s;
+}
+.da-btn.danger { color: var(--red); border-color: #3a1a1a; }
+.da-btn.danger:active { background: var(--red); color: #fff; border-color: var(--red); }
+
+/* Extra row */
+#extra-row { display: flex; gap: 6px; padding: 0 14px 12px; }
+.ex-btn {
+  flex: 1; padding: 8px 0; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text2);
+  font-family: var(--mono); font-size: 11px; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.12s;
+}
+.ex-btn.hi { border-color: var(--accent); color: var(--accent); }
+.ex-btn:active { opacity: 0.75; }
+
+/* Notes */
+#notes-area { display: none; padding: 0 14px 12px; }
+#notes-area.open { display: flex; gap: 8px; }
+#notes-ta {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 12px;
+  padding: 8px 10px; border-radius: 8px; resize: none; height: 66px; outline: none;
+}
+#notes-ta:focus { border-color: var(--accent); }
+#notes-ta::placeholder { color: var(--text3); }
+.save-btn {
+  padding: 0 16px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text2);
+  font-family: var(--mono); font-size: 11px; border-radius: 8px; cursor: pointer;
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="header">
+    <div id="logo">SHOTPUT <sub>analyzer</sub></div>
+    <button class="pb-btn" id="annotate-btn" onclick="toggleDrawBar()" style="padding:6px 14px;font-size:12px;">✏ Annotate</button>
+  </div>
+
+  <div id="mode-tabs">
+    <button class="mode-tab active" onclick="setMode('single')">Single Video</button>
+    <button class="mode-tab" onclick="setMode('split')">Side by Side</button>
+  </div>
+
+  <div id="video-region">
+
+    <!-- Slot A -->
+    <div class="video-slot" id="slot-a">
+      <div class="upload-overlay" id="upload-a">
+        <div class="upload-icon-wrap">
+          <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+            <rect x="2" y="6" width="30" height="22" rx="2" stroke="#fff" stroke-width="1.5"/>
+            <circle cx="12" cy="16" r="4" stroke="#fff" stroke-width="1.5"/>
+            <path d="M2 28l8-8 6 5 6-7 10 10" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="upload-actions">
+          <label class="btn-gallery">
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+              <rect x="1" y="1" width="15" height="15" rx="2" stroke="currentColor" stroke-width="1.3"/>
+              <circle cx="5.5" cy="5.5" r="1.8" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M1 12.5l4-4 3 3 3-4 5 5" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+            </svg>
+            Choose from Library
+            <input type="file" accept="video/*,video/mp4,video/quicktime,video/x-m4v,video/avi,video/webm,.mp4,.mov,.m4v,.avi,.webm,.mkv,.3gp" style="display:none" onchange="loadVideo('a',this)">
+          </label>
+          <div class="record-wrap">
+            <label class="record-outer">
+              <div class="record-inner"></div>
+              <input type="file" accept="video/*" capture="environment" style="display:none" onchange="loadVideo('a',this)">
+            </label>
+            <span class="record-label">Record</span>
+          </div>
+        </div>
+        <span class="upload-hint">MP4 · MOV · HEVC · WebM · 3GP</span>
+      </div>
+      <video id="video-a" playsinline webkit-playsinline></video>
+      <canvas id="canvas-a"></canvas>
+      <div id="draw-badge">● Draw Mode</div>
+      <div id="angle-badge"></div>
+    </div>
+
+    <!-- Slot B -->
+    <div class="video-slot" id="slot-b" style="display:none">
+      <div class="upload-overlay" id="upload-b">
+        <div class="upload-icon-wrap">
+          <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+            <rect x="2" y="6" width="30" height="22" rx="2" stroke="#fff" stroke-width="1.5"/>
+            <circle cx="12" cy="16" r="4" stroke="#fff" stroke-width="1.5"/>
+            <path d="M2 28l8-8 6 5 6-7 10 10" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="upload-actions">
+          <label class="btn-gallery">
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+              <rect x="1" y="1" width="15" height="15" rx="2" stroke="currentColor" stroke-width="1.3"/>
+              <circle cx="5.5" cy="5.5" r="1.8" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M1 12.5l4-4 3 3 3-4 5 5" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+            </svg>
+            Choose from Library
+            <input type="file" accept="video/*,video/mp4,video/quicktime,video/x-m4v,video/avi,video/webm,.mp4,.mov,.m4v,.avi,.webm,.mkv,.3gp" style="display:none" onchange="loadVideo('b',this)">
+          </label>
+          <div class="record-wrap">
+            <label class="record-outer">
+              <div class="record-inner"></div>
+              <input type="file" accept="video/*" capture="environment" style="display:none" onchange="loadVideo('b',this)">
+            </label>
+            <span class="record-label">Record</span>
+          </div>
+        </div>
+        <span class="upload-hint">MP4 · MOV · HEVC · WebM · 3GP</span>
+      </div>
+      <video id="video-b" playsinline webkit-playsinline></video>
+      <canvas id="canvas-b"></canvas>
+    </div>
+  </div>
+
+  <!-- Bottom panel -->
+  <div id="bottom">
+    <div id="scrub-row">
+      <input type="range" id="scrub-bar" min="0" max="10000" value="0" step="1" oninput="seekTo(this.value)">
+      <span id="time-disp">0.000 / 0.000</span>
+    </div>
+
+    <div id="play-row">
+      <button class="pb-btn" onclick="stepFrame(-1)">◀ −1</button>
+      <button class="pb-btn wide active" id="play-btn" onclick="togglePlay()">▶ Play</button>
+      <button class="pb-btn" onclick="stepFrame(1)">+1 ▶</button>
+      <button class="pb-btn" id="loop-btn" onclick="loopToggle()">⟳ Loop</button>
+      <button class="pb-btn" id="in-btn" onclick="setLoopIn()">Set In</button>
+      <button class="pb-btn" id="out-btn" onclick="setLoopOut()">Set Out</button>
+    </div>
+
+    <div id="speed-row">
+      <span>Speed</span>
+      <button class="spd-btn" onclick="setSpeed(0.1)">0.1×</button>
+      <button class="spd-btn" onclick="setSpeed(0.25)">0.25×</button>
+      <button class="spd-btn" onclick="setSpeed(0.5)">0.5×</button>
+      <button class="spd-btn active" onclick="setSpeed(1)">1×</button>
+    </div>
+
+    <div id="draw-toolbar">
+      <div id="tool-row">
+        <button class="dtool-btn active" data-tool="line" onclick="setTool('line')">Line</button>
+        <button class="dtool-btn" data-tool="angle" onclick="setTool('angle')">Angle</button>
+        <button class="dtool-btn" data-tool="arrow" onclick="setTool('arrow')">Arrow</button>
+        <button class="dtool-btn" data-tool="circle" onclick="setTool('circle')">Circle</button>
+        <button class="dtool-btn" data-tool="free" onclick="setTool('free')">Free</button>
+      </div>
+      <div id="draw-actions">
+        <input type="color" id="color-pick" value="#e8ff47" onchange="strokeColor=this.value" title="Stroke color">
+        <button class="da-btn" onclick="undoStroke()">↩ Undo</button>
+        <button class="da-btn danger" onclick="clearCanvas()">✕ Clear All</button>
+      </div>
+    </div>
+
+    <div id="extra-row">
+      <button class="ex-btn hi" id="export-btn" onclick="exportFrame()" style="display:none">⬇ Export Frame</button>
+      <button class="ex-btn" onclick="toggleNotes()">📝 Notes</button>
+    </div>
+
+    <div id="notes-area">
+      <textarea id="notes-ta" placeholder="Technique notes, coaching cues, timestamps…"></textarea>
+      <button class="save-btn" onclick="saveNotes()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let tool = 'line', strokeColor = '#e8ff47';
+let drawMode = false, drawing = false;
+let startX = 0, startY = 0, snapshot = null;
+let strokes = [], currentPts = [];
+let mode = 'single', activeSlot = 'a';
+let loopEnabled = false, loopIn = 0, loopOut = null;
+
+const vidA = document.getElementById('video-a');
+const vidB = document.getElementById('video-b');
+const cvA  = document.getElementById('canvas-a');
+const cvB  = document.getElementById('canvas-b');
+const cxA  = cvA.getContext('2d');
+const cxB  = cvB.getContext('2d');
+
+function aVid() { return activeSlot === 'a' ? vidA : vidB; }
+function aCv()  { return activeSlot === 'a' ? cvA  : cvB;  }
+function aCx()  { return activeSlot === 'a' ? cxA  : cxB;  }
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-tab').forEach((t,i) => t.classList.toggle('active', (m==='single'&&i===0)||(m==='split'&&i===1)));
+  document.getElementById('slot-b').style.display = m === 'split' ? 'flex' : 'none';
+  setTimeout(syncAll, 50);
+}
+
+function loadVideo(slot, input) {
+  const file = input.files[0]; if (!file) return;
+  const vid = slot === 'a' ? vidA : vidB;
+  vid.src = URL.createObjectURL(file);
+  vid.style.display = 'block';
+  document.getElementById('upload-' + slot).classList.add('hidden');
+  vid.addEventListener('loadedmetadata', () => { syncAll(); updateTime(); }, { once: true });
+  if (slot === 'a') {
+    document.getElementById('export-btn').style.display = '';
+    vid.addEventListener('timeupdate', updateTime);
+    vid.addEventListener('ended', () => {
+      document.getElementById('play-btn').textContent = '▶ Play';
+      document.getElementById('play-btn').classList.add('active');
+    });
+  }
+  activeSlot = slot;
+}
+
+function syncOne(vid, cv) {
+  if (!vid.videoWidth) return;
+  cv.width = vid.videoWidth; cv.height = vid.videoHeight;
+  cv.style.width = vid.offsetWidth + 'px'; cv.style.height = vid.offsetHeight + 'px';
+}
+function syncAll() { syncOne(vidA, cvA); syncOne(vidB, cvB); }
+window.addEventListener('resize', () => { setTimeout(() => { syncAll(); redrawAll(); }, 80); });
+
+document.getElementById('slot-a').addEventListener('click', () => activeSlot = 'a');
+document.getElementById('slot-b').addEventListener('click', () => activeSlot = 'b');
+
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
+}
+
+function toggleDrawBar() {
+  const bar = document.getElementById('draw-toolbar');
+  const btn = document.getElementById('annotate-btn');
+  const open = bar.classList.toggle('open');
+  btn.classList.toggle('active', open);
+  if (open) {
+    aVid().pause();
+    document.getElementById('play-btn').textContent = '▶ Play';
+    document.getElementById('play-btn').classList.add('active');
+    aCv().classList.add('draw-active');
+    document.getElementById('draw-badge').style.display = 'block';
+    drawMode = true;
+    attachDraw();
+  } else {
+    aCv().classList.remove('draw-active');
+    document.getElementById('draw-badge').style.display = 'none';
+    document.getElementById('angle-badge').style.display = 'none';
+    drawMode = false;
+    detachDraw();
+  }
+}
+
+function attachDraw() {
+  const cv = aCv();
+  cv.addEventListener('mousedown',  onDown);
+  cv.addEventListener('mousemove',  onMove);
+  cv.addEventListener('mouseup',    onUp);
+  cv.addEventListener('mouseleave', onLeave);
+  cv.addEventListener('touchstart', onTS, { passive: false });
+  cv.addEventListener('touchmove',  onTM, { passive: false });
+  cv.addEventListener('touchend',   onTE);
+}
+function detachDraw() {
+  const cv = aCv();
+  cv.removeEventListener('mousedown',  onDown);
+  cv.removeEventListener('mousemove',  onMove);
+  cv.removeEventListener('mouseup',    onUp);
+  cv.removeEventListener('mouseleave', onLeave);
+  cv.removeEventListener('touchstart', onTS);
+  cv.removeEventListener('touchmove',  onTM);
+  cv.removeEventListener('touchend',   onTE);
+}
+
+function getPos(e) {
+  const cv = aCv(), r = cv.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return { x: (src.clientX - r.left) * cv.width / r.width, y: (src.clientY - r.top) * cv.height / r.height };
+}
+function onTS(e) { e.preventDefault(); onDown(e); }
+function onTM(e) { e.preventDefault(); onMove(e); }
+function onTE(e) { onUp(e); }
+
+function onDown(e) {
+  drawing = true;
+  const p = getPos(e); startX = p.x; startY = p.y; currentPts = [p];
+  snapshot = aCx().getImageData(0, 0, aCv().width, aCv().height);
+}
+
+function onMove(e) {
+  if (!drawing) return;
+  const p = getPos(e), cx = aCx();
+  cx.putImageData(snapshot, 0, 0);
+  cx.strokeStyle = strokeColor; cx.lineWidth = 2.5; cx.lineJoin = 'round'; cx.lineCap = 'round';
+  if (tool === 'line') {
+    cx.beginPath(); cx.moveTo(startX,startY); cx.lineTo(p.x,p.y); cx.stroke();
+  } else if (tool === 'arrow') {
+    drawArrow(cx, startX, startY, p.x, p.y);
+  } else if (tool === 'angle') {
+    const mx = (startX+p.x)/2;
+    cx.beginPath(); cx.moveTo(startX,startY); cx.lineTo(mx,startY); cx.lineTo(p.x,p.y); cx.stroke();
+    const ang = Math.round(Math.abs(Math.atan2(p.y-startY, p.x-mx)*180/Math.PI));
+    cx.fillStyle = strokeColor; cx.font = 'bold 15px DM Mono,monospace';
+    cx.fillText(ang+'°', mx+4, startY-8);
+    const ab = document.getElementById('angle-badge'); ab.textContent = ang+'°'; ab.style.display = 'block';
+  } else if (tool === 'circle') {
+    const r = Math.hypot(p.x-startX, p.y-startY);
+    cx.beginPath(); cx.arc(startX, startY, r, 0, Math.PI*2); cx.stroke();
+  } else if (tool === 'free') {
+    currentPts.push(p);
+    cx.beginPath(); currentPts.forEach((pt,i) => i===0 ? cx.moveTo(pt.x,pt.y) : cx.lineTo(pt.x,pt.y)); cx.stroke();
+  }
+}
+
+function onLeave(e) { if (drawing) onUp(e); }
+
+function onUp(e) {
+  if (!drawing) return; drawing = false;
+  const src = e.changedTouches ? e.changedTouches[0] : e;
+  const cv = aCv(), r = cv.getBoundingClientRect();
+  const p = { x: (src.clientX-r.left)*cv.width/r.width, y: (src.clientY-r.top)*cv.height/r.height };
+  strokes.push({ tool, color: strokeColor, sx: startX, sy: startY, ex: p.x, ey: p.y, pts: [...currentPts], slot: activeSlot });
+  if (tool !== 'angle') document.getElementById('angle-badge').style.display = 'none';
+}
+
+function drawArrow(cx, x1, y1, x2, y2) {
+  const h=16, a=Math.atan2(y2-y1,x2-x1);
+  cx.beginPath(); cx.moveTo(x1,y1); cx.lineTo(x2,y2); cx.stroke();
+  cx.beginPath();
+  cx.moveTo(x2,y2); cx.lineTo(x2-h*Math.cos(a-0.4), y2-h*Math.sin(a-0.4));
+  cx.moveTo(x2,y2); cx.lineTo(x2-h*Math.cos(a+0.4), y2-h*Math.sin(a+0.4));
+  cx.stroke();
+}
+
+function renderStroke(cx, s) {
+  cx.strokeStyle = s.color; cx.lineWidth = 2.5; cx.lineJoin = 'round'; cx.lineCap = 'round';
+  if (s.tool === 'line') { cx.beginPath(); cx.moveTo(s.sx,s.sy); cx.lineTo(s.ex,s.ey); cx.stroke(); }
+  else if (s.tool === 'arrow') { drawArrow(cx, s.sx, s.sy, s.ex, s.ey); }
+  else if (s.tool === 'angle') {
+    const mx = (s.sx+s.ex)/2;
+    cx.beginPath(); cx.moveTo(s.sx,s.sy); cx.lineTo(mx,s.sy); cx.lineTo(s.ex,s.ey); cx.stroke();
+    const ang = Math.round(Math.abs(Math.atan2(s.ey-s.sy, s.ex-mx)*180/Math.PI));
+    cx.fillStyle = s.color; cx.font = 'bold 15px DM Mono,monospace'; cx.fillText(ang+'°', mx+4, s.sy-8);
+  } else if (s.tool === 'circle') {
+    const r = Math.hypot(s.ex-s.sx, s.ey-s.sy);
+    cx.beginPath(); cx.arc(s.sx, s.sy, r, 0, Math.PI*2); cx.stroke();
+  } else if (s.tool === 'free' && s.pts.length > 1) {
+    cx.beginPath(); s.pts.forEach((pt,i) => i===0 ? cx.moveTo(pt.x,pt.y) : cx.lineTo(pt.x,pt.y)); cx.stroke();
+  }
+}
+
+function redrawAll() {
+  [[cxA,cvA,'a'],[cxB,cvB,'b']].forEach(([cx,cv,sl]) => {
+    cx.clearRect(0,0,cv.width,cv.height);
+    strokes.filter(s=>s.slot===sl).forEach(s=>renderStroke(cx,s));
+  });
+}
+
+function undoStroke() {
+  const idx = strokes.map((s,i)=>s.slot===activeSlot?i:-1).filter(i=>i>=0);
+  if (idx.length) { strokes.splice(idx[idx.length-1],1); redrawAll(); }
+}
+function clearCanvas() {
+  strokes = strokes.filter(s=>s.slot!==activeSlot);
+  aCx().clearRect(0,0,aCv().width,aCv().height);
+}
+
+function togglePlay() {
+  const vid=vidA, btn=document.getElementById('play-btn');
+  if (vid.paused) { vid.play(); btn.textContent='⏸ Pause'; btn.classList.remove('active'); }
+  else            { vid.pause(); btn.textContent='▶ Play';  btn.classList.add('active'); }
+}
+
+function updateTime() {
+  const t=vidA.currentTime, d=vidA.duration||0;
+  document.getElementById('time-disp').textContent = t.toFixed(3)+' / '+d.toFixed(3);
+  document.getElementById('scrub-bar').value = Math.round((t/(d||1))*10000);
+  if (loopEnabled && loopOut!==null && t>=loopOut) vidA.currentTime=loopIn;
+}
+
+function seekTo(v) {
+  if (!vidA.duration) return;
+  vidA.currentTime = (v/10000)*vidA.duration;
+  if (mode==='split'&&vidB.readyState>=2) vidB.currentTime=(v/10000)*(vidB.duration||1);
+}
+
+function stepFrame(d) {
+  vidA.pause();
+  document.getElementById('play-btn').textContent='▶ Play';
+  document.getElementById('play-btn').classList.add('active');
+  vidA.currentTime=Math.max(0,Math.min(vidA.duration||0,vidA.currentTime+d/30));
+  if (mode==='split'&&vidB.readyState>=2) vidB.currentTime=Math.max(0,Math.min(vidB.duration||0,vidB.currentTime+d/30));
+}
+
+function setSpeed(s) {
+  vidA.playbackRate=s; vidB.playbackRate=s;
+  document.querySelectorAll('.spd-btn').forEach(b=>b.classList.toggle('active',b.textContent===s+'×'));
+}
+
+function loopToggle() {
+  loopEnabled=!loopEnabled;
+  document.getElementById('loop-btn').classList.toggle('active',loopEnabled);
+}
+function setLoopIn()  { loopIn=vidA.currentTime;  document.getElementById('in-btn').textContent='In: '+loopIn.toFixed(2)+'s'; }
+function setLoopOut() { loopOut=vidA.currentTime; document.getElementById('out-btn').textContent='Out: '+loopOut.toFixed(2)+'s'; }
+
+vidA.addEventListener('timeupdate', updateTime);
+
+function exportFrame() {
+  const vid=aVid(), cv=aCv(); if (!vid.videoWidth) return;
+  const out=document.createElement('canvas'); out.width=vid.videoWidth; out.height=vid.videoHeight;
+  const ox=out.getContext('2d'); ox.drawImage(vid,0,0); ox.drawImage(cv,0,0);
+  const a=document.createElement('a');
+  a.download='shotput_'+vid.currentTime.toFixed(3).replace('.','-')+'s.png';
+  a.href=out.toDataURL('image/png'); a.click();
+}
+
+function toggleNotes() { document.getElementById('notes-area').classList.toggle('open'); }
+function saveNotes() {
+  const a=document.createElement('a'); a.download='shotput_notes.txt';
+  a.href=URL.createObjectURL(new Blob([document.getElementById('notes-ta').value],{type:'text/plain'})); a.click();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName==='TEXTAREA') return;
+  if (e.key===' ') { e.preventDefault(); togglePlay(); }
+  if (e.key==='ArrowLeft') { e.preventDefault(); stepFrame(-1); }
+  if (e.key==='ArrowRight') { e.preventDefault(); stepFrame(1); }
+  if (e.key==='d') toggleDrawBar();
+  if ((e.ctrlKey||e.metaKey)&&e.key==='z') { e.preventDefault(); undoStroke(); }
+  if (e.key==='1') setSpeed(0.1); if (e.key==='2') setSpeed(0.25);
+  if (e.key==='3') setSpeed(0.5); if (e.key==='4') setSpeed(1);
+});
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  const btn=document.createElement('button'); btn.className='ex-btn'; btn.textContent='⬇ Install App';
+  btn.onclick=()=>e.prompt(); document.getElementById('extra-row').prepend(btn);
+});
+</script>
+</body>
+</html>
